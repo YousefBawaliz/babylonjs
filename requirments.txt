@@ -1,0 +1,6 @@
+Latest babylon
+import GLB file
+View it in center of the screen
+Default environment
+Navigate the scene
+Rest API, to change the GLB file 

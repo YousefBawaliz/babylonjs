@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Babylon.js + Vue 3D Model Viewer</title>
+    <!-- Vue.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.3.4/vue.global.min.js"></script>
+    <!-- Babylon.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs/6.6.1/babylon.min.js"></script>
+    <!-- Babylon.js loaders -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs-loaders/6.6.1/babylonjs.loaders.min.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        #app {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        .controls {
+            padding: 10px;
+            background-color: #f0f0f0;
+            z-index: 10;
+        }
+        .canvas-container {
+            flex: 1;
+            position: relative;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="controls">
+            <input type="file" @change="uploadModel" accept=".glb" ref="fileInput">
+            <button @click="$refs.fileInput.click()">Upload GLB File</button>
+            <button @click="loadDefaultModel" v-if="!modelLoaded">Load Default Model</button>
+        </div>
+        <div class="canvas-container">
+            <canvas ref="renderCanvas"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted, watch } = Vue;
+
+        createApp({
+            setup() {
+                const renderCanvas = ref(null);
+                const fileInput = ref(null);
+                const engine = ref(null);
+                const scene = ref(null);
+                const modelLoaded = ref(false);
+                
+                // Initialize Babylon.js
+                const initBabylon = () => {
+                    engine.value = new BABYLON.Engine(renderCanvas.value, true);
+                    scene.value = createScene();
+                    
+                    // Run the render loop
+                    engine.value.runRenderLoop(() => {
+                        scene.value.render();
+                    });
+                    
+                    // Handle browser resize
+                    window.addEventListener('resize', () => {
+                        engine.value.resize();
+                    });
+                };
+                
+                // Create the Babylon.js scene
+                const createScene = () => {
+                    const scene = new BABYLON.Scene(engine.value);
+                    
+                    // Add a camera
+                    const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2.5, 5, BABYLON.Vector3.Zero(), scene);
+                    camera.attachControl(renderCanvas.value, true);
+                    camera.wheelPrecision = 50;
+                    camera.lowerRadiusLimit = 2;
+                    camera.upperRadiusLimit = 10;
+                    
+                    // Add lights
+                    const light1 = new BABYLON.HemisphericLight("light1", new BABYLON.Vector3(1, 1, 0), scene);
+                    const light2 = new BABYLON.PointLight("light2", new BABYLON.Vector3(0, 1, -1), scene);
+                    
+                    // Add environment
+                    scene.createDefaultEnvironment({
+                        createGround: true,
+                        groundSize: 10,
+                        skyboxSize: 100,
+                        groundColor: new BABYLON.Color3(0.5, 0.5, 0.5)
+                    });
+                    
+                    return scene;
+                };
+                
+                // Load a model from file input
+                const uploadModel = (event) => {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    
+                    // Clear previous models
+                    clearModels();
+                    
+                    // Create a URL for the file
+                    const url = URL.createObjectURL(file);
+                    
+                    // Load the GLB file
+                    BABYLON.SceneLoader.ImportMesh("", "", url, scene.value, (meshes) => {
+                        // Center the model
+                        const rootMesh = new BABYLON.Mesh("root", scene.value);
+                        meshes.forEach(mesh => {
+                            if (mesh.parent === null && mesh !== rootMesh) {
+                                mesh.parent = rootMesh;
+                            }
+                        });
+                        
+                        // Calculate bounding info and position
+                        rootMesh.position = BABYLON.Vector3.Zero();
+                        const boundingInfo = calculateBoundingInfo(meshes);
+                        
+                        // Position camera to frame the model
+                        const camera = scene.value.getCameraByName("camera");
+                        camera.setTarget(boundingInfo.center);
+                        camera.radius = boundingInfo.radius * 2.5;
+                        
+                        modelLoaded.value = true;
+                        URL.revokeObjectURL(url);
+                    });
+                };
+                
+                // Load a default model
+                const loadDefaultModel = () => {
+                    // Clear previous models
+                    clearModels();
+                    
+                    // For demo purposes, you can load a default GLB model
+                    // Replace the URL with a valid GLB model URL
+                    const defaultModelUrl = "https://playground.babylonjs.com/scenes/BrainStem.glb";
+                    
+                    BABYLON.SceneLoader.ImportMesh("", "", defaultModelUrl, scene.value, (meshes) => {
+                        // Center the model
+                        const rootMesh = new BABYLON.Mesh("root", scene.value);
+                        meshes.forEach(mesh => {
+                            if (mesh.parent === null && mesh !== rootMesh) {
+                                mesh.parent = rootMesh;
+                            }
+                        });
+                        
+                        // Calculate bounding info and position
+                        rootMesh.position = BABYLON.Vector3.Zero();
+                        const boundingInfo = calculateBoundingInfo(meshes);
+                        
+                        // Position camera to frame the model
+                        const camera = scene.value.getCameraByName("camera");
+                        camera.setTarget(boundingInfo.center);
+                        camera.radius = boundingInfo.radius * 2.5;
+                        
+                        modelLoaded.value = true;
+                    });
+                };
+                
+                // Clear all models from the scene
+                const clearModels = () => {
+                    if (scene.value) {
+                        scene.value.meshes.slice().forEach(mesh => {
+                            if (mesh.name !== "ground" && !mesh.name.includes("skybox")) {
+                                mesh.dispose();
+                            }
+                        });
+                    }
+                };
+                
+                // Calculate bounding info for a set of meshes
+                const calculateBoundingInfo = (meshes) => {
+                    let minX = Infinity, minY = Infinity, minZ = Infinity;
+                    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+                    
+                    meshes.forEach(mesh => {
+                        if (mesh.getBoundingInfo && mesh.isVisible && !mesh.name.includes("ground") && !mesh.name.includes("skybox")) {
+                            const boundingInfo = mesh.getBoundingInfo();
+                            const boundingBox = boundingInfo.boundingBox;
+                            
+                            const min = boundingBox.minimumWorld;
+                            const max = boundingBox.maximumWorld;
+                            
+                            minX = Math.min(minX, min.x);
+                            minY = Math.min(minY, min.y);
+                            minZ = Math.min(minZ, min.z);
+                            
+                            maxX = Math.max(maxX, max.x);
+                            maxY = Math.max(maxY, max.y);
+                            maxZ = Math.max(maxZ, max.z);
+                        }
+                    });
+                    
+                    if (minX === Infinity) {
+                        // No valid meshes found, return default values
+                        return {
+                            center: new BABYLON.Vector3(0, 0, 0),
+                            radius: 5
+                        };
+                    }
+                    
+                    const center = new BABYLON.Vector3(
+                        (minX + maxX) / 2,
+                        (minY + maxY) / 2,
+                        (minZ + maxZ) / 2
+                    );
+                    
+                    const radius = Math.max(
+                        Math.abs(maxX - minX),
+                        Math.abs(maxY - minY),
+                        Math.abs(maxZ - minZ)
+                    ) / 2;
+                    
+                    return { center, radius };
+                };
+                
+                onMounted(() => {
+                    initBabylon();
+                });
+                
+                return {
+                    renderCanvas,
+                    fileInput,
+                    uploadModel,
+                    loadDefaultModel,
+                    modelLoaded
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
