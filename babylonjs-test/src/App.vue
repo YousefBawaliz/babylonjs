@@ -1,11 +1,18 @@
 <script setup lang="ts">
 import BabylonScene from './components/BabylonScene.vue'
+import GlbViewer from './components/GlbViewer.vue';
+// import BabylonViewer from './components/BabylonViewer.vue'
 </script>
 
 <template>
   <div class="app-container">
     <h1>Babylon.js GLB Viewer</h1>
-    <BabylonScene />
+    <!-- <BabylonScene /> -->
+    <!-- Use with a model URL: -->
+    <!-- <BabylonViewer modelUrl="./models/z.glb" /> -->
+    <!-- Or without a model URL to show the Add Model button: -->
+    <!-- <BabylonViewer /> -->
+     <GlbViewer />
   </div>
 </template>
 
